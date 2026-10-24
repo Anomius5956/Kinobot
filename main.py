@@ -7,6 +7,8 @@ from telethon import TelegramClient, events
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
+
+# Sizning guruhingiz ID'si
 TARGET_GROUP_ID = -1003025094654
 MUNDARIJA_LINK = "https://t.me/shaxsiybazamm"
 
@@ -18,6 +20,7 @@ client = TelegramClient(
 
 RAW_GROUP_ID = str(TARGET_GROUP_ID).replace("-100", "").replace("-", "")
 
+# 1. Baza faylini yuklash
 TOPICS_CACHE = {}
 if os.path.exists("topics.json"):
     try:
@@ -27,7 +30,7 @@ if os.path.exists("topics.json"):
     except Exception as e:
         print(f"Fayl o'qishda xatolik: {e}", flush=True)
 else:
-    print("⚠️ topics.json topilmadi, xabarlardan keshlanadi.", flush=True)
+    print("⚠️ topics.json topilmadi!", flush=True)
 
 def clean_title(text):
     return re.sub(r"[\[\]_*~`]", "", text or "").strip()
@@ -39,7 +42,7 @@ def search_movies(query):
         return []
 
     results = []
-    # 1. Barcha so'zlar mos kelgan kinolar
+    # 1. Barcha so'zlar mos kelgan mavzular
     for t_id, title in TOPICS_CACHE.items():
         title_clean = re.sub(r"[^\w\s]", "", title.lower()).strip()
         if all(word in title_clean for word in q_words):
@@ -47,7 +50,7 @@ def search_movies(query):
             if len(results) >= 5:
                 return results
 
-    # 2. Kamida bitta so'z mos kelgan kinolar
+    # 2. Kamida bitta so'z to'g'ri kelgan mavzular
     if not results and len(query_clean) >= 3:
         for t_id, title in TOPICS_CACHE.items():
             title_clean = re.sub(r"[^\w\s]", "", title.lower()).strip()
@@ -60,11 +63,18 @@ def search_movies(query):
 
     return results
 
-# FAQAT SIZNING GURUHINGIZGA JAVOB BERADI: chats=[TARGET_GROUP_ID]
-@client.on(events.NewMessage(chats=[TARGET_GROUP_ID], incoming=True))
+# FAQAT SIZNING GURUHINGIZGA JAVOB BERADI
+@client.on(events.NewMessage(incoming=True))
 async def auto_reply_handler(event):
     if getattr(event, 'out', False):
         return
+
+    # Guruh tekshiruvi: faqat -1003025094654 yoki 3025094654 bo'lsa ishlaydi
+    chat_id = event.chat_id
+    allowed_ids = [TARGET_GROUP_ID, int(RAW_GROUP_ID), -int(RAW_GROUP_ID)]
+    if chat_id not in allowed_ids:
+        return  # Boshqa guruhlar yoki shaxsiydan yozilsa, jim turadi
+
     text = (event.raw_text or "").strip()
     if len(text) < 2:
         return
