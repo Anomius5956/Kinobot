@@ -18,22 +18,42 @@ client = TelegramClient(
 
 RAW_GROUP_ID = "3025094654"
 
-TOPICS_CACHE = {}
+TOPICS_CACHE = []
 if os.path.exists("topics.json"):
     try:
         with open("topics.json", "r", encoding="utf-8") as f:
             raw_data = json.load(f)
-            for k, v in raw_data.items():
-                if isinstance(v, dict):
-                    title = v.get("title", k)
-                    link = v.get("link", "")
-                    TOPICS_CACHE[k.lower()] = {"title": title, "link": link}
-                else:
-                    title = str(v)
-                    clean_id = re.sub(r"\D", "", str(k))
-                    link = f"https://t.me/c/{RAW_GROUP_ID}/{clean_id}"
-                    TOPICS_CACHE[title.lower()] = {"title": title, "link": link}
-        print(f"✅ Baza tayyor: {len(TOPICS_CACHE)} ta kino yuklandi.", flush=True)
+            if isinstance(raw_data, dict):
+                for k, v in raw_data.items():
+                    if isinstance(v, dict):
+                        title = v.get("title") or k
+                        link = v.get("link") or f"https://t.me/c/{RAW_GROUP_ID}/{k}"
+                    else:
+                        title = str(v)
+                        clean_id = re.sub(r"\D", "", str(k))
+                        link = f"https://t.me/c/{RAW_GROUP_ID}/{clean_id}"
+                    
+                    if title:
+                        clean_t = str(title).strip()
+                        norm = re.sub(r"[^\w\s]", "", clean_t.lower()).strip()
+                        TOPICS_CACHE.append({
+                            "title": clean_t,
+                            "norm": norm,
+                            "link": link
+                        })
+            elif isinstance(raw_data, list):
+                for item in raw_data:
+                    title = item.get("title", "")
+                    link = item.get("link", "")
+                    if title:
+                        clean_t = str(title).strip()
+                        norm = re.sub(r"[^\w\s]", "", clean_t.lower()).strip()
+                        TOPICS_CACHE.append({
+                            "title": clean_t,
+                            "norm": norm,
+                            "link": link
+                        })
+        print(f"✅ Baza tayyor: {len(TOPICS_CACHE)} ta kino va serial yuklandi.", flush=True)
     except Exception as e:
         print(f"Baza o'qishda xatolik: {e}", flush=True)
 else:
@@ -44,48 +64,40 @@ def clean_title(text):
 
 def search_movies(query):
     query_clean = re.sub(r"[^\w\s]", "", query.lower()).strip()
-    q_words = query_clean.split()
-    if not q_words:
+    if not query_clean:
         return []
 
+    q_words = query_clean.split()
     results = []
-    # 1. To'liq mos kelganlar
-    for key, data in TOPICS_CACHE.items():
-        title_str = (key + " " + data["title"]).lower()
-        title_clean = re.sub(r"[^\w\s]", "", title_str).strip()
-        if all(word in title_clean for word in q_words):
-            results.append(data)
+
+    # 1. Barcha yozilgan so'zlar kino nomida bor bo'lsa
+    for item in TOPICS_CACHE:
+        if all(word in item["norm"] for word in q_words):
+            results.append(item)
             if len(results) >= 5:
                 return results
 
-    # 2. Qisman mos kelganlar (kamida 3 harf)
-    if not results and len(query_clean) >= 3:
-        for key, data in TOPICS_CACHE.items():
-            title_str = (key + " " + data["title"]).lower()
-            title_clean = re.sub(r"[^\w\s]", "", title_str).strip()
-            for word in q_words:
-                if len(word) >= 3 and word in title_clean:
-                    results.append(data)
-                    break
-            if len(results) >= 5:
+    # 2. Hech bo'lmasa bitta so'z mos kelsa (kamida 3 ta harfli so'z)
+    for item in TOPICS_CACHE:
+        if item in results:
+            continue
+        for word in q_words:
+            if len(word) >= 3 and word in item["norm"]:
+                results.append(item)
                 break
+        if len(results) >= 5:
+            break
 
     return results
 
 @client.on(events.NewMessage(incoming=True))
 async def auto_reply_handler(event):
-    # Faqat guruh xabarlariga qaraymiz
-    if not event.is_group:
-        return
-
-    # O'zimiz yuborgan xabarlarni e'tiborsiz qoldiramiz
     if getattr(event, 'out', False):
         return
 
-    # Guruh ID tekshiruvi: Telethon -100 prefiksisiz yoki prefiks bilan ko'rsatishi mumkin
     chat_str = str(event.chat_id).replace("-100", "").replace("-", "")
     if chat_str != RAW_GROUP_ID:
-        return  # Boshqa guruh bo'lsa, javob bermaydi
+        return
 
     text = (event.raw_text or "").strip()
     if len(text) < 2:
@@ -94,7 +106,7 @@ async def auto_reply_handler(event):
     if text.lower() in ["salom", "qalesiz", "assalomu alaykum", "/start"]:
         reply_msg = (
             "Assalomu alaykum! 🎬\n\n"
-            "Kerakli kino nomini yozing, havola avtomatik yuboriladi."
+            "Kerakli kino yoki serial nomini yozing, havola avtomatik yuboriladi."
         )
         await event.reply(reply_msg)
         return
