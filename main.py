@@ -4,6 +4,7 @@ import re
 import json
 from aiohttp import web
 from telethon import TelegramClient, events
+from telethon.tl.tlobject import TLRequest
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
@@ -17,7 +18,39 @@ client = TelegramClient(
     API_HASH
 )
 
+class RawEditForumTopic(TLRequest):
+    CONSTRUCTOR_ID = 0xf40c0224
+    SUBCLASS_OF_ID = 0x8af52aac
+
+    def __init__(self, channel, topic_id, closed=None):
+        self.channel = channel
+        self.topic_id = topic_id
+        self.closed = closed
+
+    def to_dict(self):
+        return {
+            '_': 'EditForumTopicRequest',
+            'channel': self.channel,
+            'topic_id': self.topic_id,
+            'closed': self.closed
+        }
+
+    def _bytes(self):
+        flags = 0
+        if self.closed is not None:
+            flags |= 4
+        data = self.CONSTRUCTOR_ID.to_bytes(4, 'little')
+        data += flags.to_bytes(4, 'little')
+        data += self.channel._bytes()
+        data += self.topic_id.to_bytes(4, 'little', signed=True)
+        if self.closed is not None:
+            bool_id = 0x997275b5 if self.closed else 0xbc799737
+            data += bool_id.to_bytes(4, 'little')
+        return data
+
 DATABASE = []
+TOPIC_IDS = []
+
 if os.path.exists("topics.json"):
     try:
         with open("topics.json", "r", encoding="utf-8") as f:
@@ -29,7 +62,10 @@ if os.path.exists("topics.json"):
                     m = re.findall(r"\d+", item.get("link", ""))
                     p_id = m[-1] if m else re.sub(r"\D", "", str(k))
                 
-                # Aynan shu guruhdagi to'g'ridan-to'g'ri post havolasi
+                clean_pid = re.sub(r"\D", "", str(p_id))
+                if clean_pid and int(clean_pid) > 1 and int(clean_pid) not in TOPIC_IDS:
+                    TOPIC_IDS.append(int(clean_pid))
+
                 link = f"https://t.me/c/{RAW_GROUP_ID}/{p_id}"
                 norm = re.sub(r"[^\w\s]", "", title.lower()).strip()
                 DATABASE.append({
@@ -52,14 +88,12 @@ def search_movies(query):
     q_words = query_clean.split()
     results = []
 
-    # 1. To'liq so'zlar mos kelishi
     for item in DATABASE:
         if all(word in item["norm"] for word in q_words):
             results.append(item)
             if len(results) >= 5:
                 return results
 
-    # 2. Qisman mos kelishi
     if not results and len(query_clean) >= 3:
         for item in DATABASE:
             for word in q_words:
@@ -71,12 +105,29 @@ def search_movies(query):
 
     return results
 
-@client.on(events.NewMessage(chats=[TARGET_GROUP_ID], incoming=True))
+@client.on(events.NewMessage(chats=[TARGET_GROUP_ID]))
 async def auto_reply_handler(event):
+    text = (event.raw_text or "").strip()
+
+    # Maxsus buyruq: faqat siz yozganingizda barcha mavzularni Render orqali yopadi
+    if text == "/close_all_topics":
+        await event.reply("🔒 Barcha mavzularni yopish boshlandi...")
+        entity = await client.get_input_entity(TARGET_GROUP_ID)
+        done = 0
+        for tid in TOPIC_IDS:
+            try:
+                await client(RawEditForumTopic(channel=entity, topic_id=tid, closed=True))
+                done += 1
+                await asyncio.sleep(0.15)
+            except Exception:
+                continue
+        await event.reply(f"✅ Barcha mavzular muvaffaqiyatli yopildi! Jami: {done} ta")
+        return
+
+    # O'zimizning oddiy xabarlarimizga javob bermaslik
     if getattr(event, 'out', False):
         return
 
-    text = (event.raw_text or "").strip()
     if len(text) < 2:
         return
 
@@ -94,11 +145,9 @@ async def auto_reply_handler(event):
         for item in found:
             clean_name = clean_title(item["title"])
             link = item["link"]
-            # Har bir kino alohida ko'k havola ko'rinishida chiqadi
             response_text += f"🎬 **[{clean_name}]({link})**\n\n"
         
         response_text += f"✨ @FilimHudud Eng Sara Filmlar\n📚 Barcha kinolar: {MUNDARIJA_LINK}"
-        # link_preview=False orqali "Xabarni to'liq ko'rish" tugmasini olib tashlaymiz
         await event.reply(response_text, link_preview=False)
     else:
         response_text = (
