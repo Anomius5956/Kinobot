@@ -4,7 +4,6 @@ import re
 import json
 from aiohttp import web
 from telethon import TelegramClient, events
-from telethon.tl.tlobject import TLRequest
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
@@ -12,45 +11,14 @@ TARGET_GROUP_ID = -1003025094654
 RAW_GROUP_ID = "3025094654"
 MUNDARIJA_LINK = "https://t.me/shaxsiybazamm"
 
+# Yangi sessiya nomi (to'qnashuvlarni yo'qotish uchun)
 client = TelegramClient(
-    "cinema_baza_termux_api1", 
+    "cinema_bot_fresh_session", 
     API_ID, 
     API_HASH
 )
 
-class RawEditForumTopic(TLRequest):
-    CONSTRUCTOR_ID = 0xf40c0224
-    SUBCLASS_OF_ID = 0x8af52aac
-
-    def __init__(self, channel, topic_id, closed=None):
-        self.channel = channel
-        self.topic_id = topic_id
-        self.closed = closed
-
-    def to_dict(self):
-        return {
-            '_': 'EditForumTopicRequest',
-            'channel': self.channel,
-            'topic_id': self.topic_id,
-            'closed': self.closed
-        }
-
-    def _bytes(self):
-        flags = 0
-        if self.closed is not None:
-            flags |= 4
-        data = self.CONSTRUCTOR_ID.to_bytes(4, 'little')
-        data += flags.to_bytes(4, 'little')
-        data += self.channel._bytes()
-        data += self.topic_id.to_bytes(4, 'little', signed=True)
-        if self.closed is not None:
-            bool_id = 0x997275b5 if self.closed else 0xbc799737
-            data += bool_id.to_bytes(4, 'little')
-        return data
-
 DATABASE = []
-TOPIC_IDS = []
-
 if os.path.exists("topics.json"):
     try:
         with open("topics.json", "r", encoding="utf-8") as f:
@@ -62,10 +30,6 @@ if os.path.exists("topics.json"):
                     m = re.findall(r"\d+", item.get("link", ""))
                     p_id = m[-1] if m else re.sub(r"\D", "", str(k))
                 
-                clean_pid = re.sub(r"\D", "", str(p_id))
-                if clean_pid and int(clean_pid) > 1 and int(clean_pid) not in TOPIC_IDS:
-                    TOPIC_IDS.append(int(clean_pid))
-
                 link = f"https://t.me/c/{RAW_GROUP_ID}/{p_id}"
                 norm = re.sub(r"[^\w\s]", "", title.lower()).strip()
                 DATABASE.append({
@@ -73,9 +37,9 @@ if os.path.exists("topics.json"):
                     "norm": norm,
                     "link": link
                 })
-        print(f"✅ Baza tayyor: {len(DATABASE)} ta kino yuklandi.", flush=True)
+        print(f"✅ Baza yuklandi: {len(DATABASE)} ta kino tayyor.", flush=True)
     except Exception as e:
-        print(f"Baza o'qishda xatolik: {e}", flush=True)
+        print(f"Baza xatosi: {e}", flush=True)
 
 def clean_title(text):
     return re.sub(r"[\[\]_*~`]", "", text or "").strip()
@@ -88,12 +52,14 @@ def search_movies(query):
     q_words = query_clean.split()
     results = []
 
+    # To'liq mos kelish
     for item in DATABASE:
         if all(word in item["norm"] for word in q_words):
             results.append(item)
             if len(results) >= 5:
                 return results
 
+    # Qisman mos kelish
     if not results and len(query_clean) >= 3:
         for item in DATABASE:
             for word in q_words:
@@ -105,29 +71,12 @@ def search_movies(query):
 
     return results
 
-@client.on(events.NewMessage(chats=[TARGET_GROUP_ID]))
+@client.on(events.NewMessage(chats=[TARGET_GROUP_ID], incoming=True))
 async def auto_reply_handler(event):
-    text = (event.raw_text or "").strip()
-
-    # Maxsus buyruq: faqat siz yozganingizda barcha mavzularni Render orqali yopadi
-    if text == "/close_all_topics":
-        await event.reply("🔒 Barcha mavzularni yopish boshlandi...")
-        entity = await client.get_input_entity(TARGET_GROUP_ID)
-        done = 0
-        for tid in TOPIC_IDS:
-            try:
-                await client(RawEditForumTopic(channel=entity, topic_id=tid, closed=True))
-                done += 1
-                await asyncio.sleep(0.15)
-            except Exception:
-                continue
-        await event.reply(f"✅ Barcha mavzular muvaffaqiyatli yopildi! Jami: {done} ta")
-        return
-
-    # O'zimizning oddiy xabarlarimizga javob bermaslik
     if getattr(event, 'out', False):
         return
 
+    text = (event.raw_text or "").strip()
     if len(text) < 2:
         return
 
@@ -167,7 +116,7 @@ async def start_web():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    print(f"🌐 Web-server port {port} da ishga tushdi", flush=True)
+    print(f"🌐 Web-server port {port} da faol", flush=True)
 
 async def main():
     await start_web()
