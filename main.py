@@ -24,14 +24,20 @@ if os.path.exists("topics.json"):
             raw_data = json.load(f)
             for k, item in raw_data.items():
                 title = item.get("title", k)
-                link = item.get("link", f"https://t.me/c/{RAW_GROUP_ID}/{item.get('id', '')}")
+                p_id = item.get("id")
+                if not p_id:
+                    m = re.findall(r"\d+", item.get("link", ""))
+                    p_id = m[-1] if m else re.sub(r"\D", "", str(k))
+                
+                # Aynan shu guruhdagi to'g'ridan-to'g'ri post havolasi
+                link = f"https://t.me/c/{RAW_GROUP_ID}/{p_id}"
                 norm = re.sub(r"[^\w\s]", "", title.lower()).strip()
                 DATABASE.append({
                     "title": title,
                     "norm": norm,
                     "link": link
                 })
-        print(f"✅ Baza to'liq yodlandi: {len(DATABASE)} ta kino va serial faol.", flush=True)
+        print(f"✅ Baza tayyor: {len(DATABASE)} ta kino yuklandi.", flush=True)
     except Exception as e:
         print(f"Baza o'qishda xatolik: {e}", flush=True)
 
@@ -46,18 +52,16 @@ def search_movies(query):
     q_words = query_clean.split()
     results = []
 
-    # 1. Barcha yozilgan so'zlar nomda to'liq qatnashgan filmlar
+    # 1. To'liq so'zlar mos kelishi
     for item in DATABASE:
         if all(word in item["norm"] for word in q_words):
             results.append(item)
             if len(results) >= 5:
                 return results
 
-    # 2. Kamida bitta asosiy so'z to'g'ri kelgan filmlar
+    # 2. Qisman mos kelishi
     if not results and len(query_clean) >= 3:
         for item in DATABASE:
-            if item in results:
-                continue
             for word in q_words:
                 if len(word) >= 3 and word in item["norm"]:
                     results.append(item)
@@ -67,7 +71,6 @@ def search_movies(query):
 
     return results
 
-# Faqat va faqat sizning guruhingizdagi xabarlarni qabul qilish
 @client.on(events.NewMessage(chats=[TARGET_GROUP_ID], incoming=True))
 async def auto_reply_handler(event):
     if getattr(event, 'out', False):
@@ -82,7 +85,7 @@ async def auto_reply_handler(event):
             "Assalomu alaykum! 🎬\n\n"
             "Kerakli kino yoki serial nomini yozing, havola avtomatik yuboriladi."
         )
-        await event.reply(reply_msg)
+        await event.reply(reply_msg, link_preview=False)
         return
 
     found = search_movies(text)
@@ -91,8 +94,11 @@ async def auto_reply_handler(event):
         for item in found:
             clean_name = clean_title(item["title"])
             link = item["link"]
-            response_text += f"🎬 [{clean_name}]({link})\n"
-        response_text += f"\n✨ @FilimHudud Eng Sara Filmlar\n📚 To'liq ro'yxat: {MUNDARIJA_LINK}"
+            # Har bir kino alohida ko'k havola ko'rinishida chiqadi
+            response_text += f"🎬 **[{clean_name}]({link})**\n\n"
+        
+        response_text += f"✨ @FilimHudud Eng Sara Filmlar\n📚 Barcha kinolar: {MUNDARIJA_LINK}"
+        # link_preview=False orqali "Xabarni to'liq ko'rish" tugmasini olib tashlaymiz
         await event.reply(response_text, link_preview=False)
     else:
         response_text = (
