@@ -60,7 +60,8 @@ def search_movies(query):
                 break
     return results
 
-@client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
+# Faqat guruhlarda kelgan xabarlarga javob qaytarish
+@client.on(events.NewMessage(incoming=True, func=lambda e: e.is_group))
 async def auto_reply_handler(event):
     if getattr(event, 'out', False):
         return
@@ -86,6 +87,8 @@ async def auto_reply_handler(event):
         response_text += f"\n✨ @FilimHudud Eng Sara Filmlar\n📚 To'liq ro'yxat: {MUNDARIJA_LINK}"
         await event.reply(response_text, link_preview=False)
     else:
+        # Guruhda hamma xabarga spam bo'lmasligi uchun faqat aniq kino so'ralganda javob berish ma'qul, 
+        # lekin topilmagan xabari kerak bo'lsa:
         response_text = (
             f"Afsuski, **'{text}'** topilmadi.\n"
             f"Barcha kinolar ro'yxati: {MUNDARIJA_LINK}"
@@ -93,7 +96,7 @@ async def auto_reply_handler(event):
         await event.reply(response_text, link_preview=False)
 
 async def handle_ping(request):
-    return web.Response(text="Bot is running 24/7!")
+    return web.Response(text="Bot is running 24/7 in groups!")
 
 async def start_web():
     app = web.Application()
