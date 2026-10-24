@@ -3,10 +3,7 @@ import os
 import re
 from aiohttp import web
 from telethon import TelegramClient, events
-from telethon.tl.types import (
-    MessageActionTopicCreate,
-    MessageActionTopicEdit
-)
+from telethon.tl.functions.channels import GetForumTopicsRequest
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
@@ -30,37 +27,70 @@ async def load_all_topics():
     print("⏳ Bazadagi barcha mavzular keshlanmoqda...", flush=True)
     try:
         group_peer = await client.get_input_entity(TARGET_GROUP_ID)
-        async for msg in client.iter_messages(group_peer, reverse=True):
-            if msg.action:
-                if isinstance(msg.action, MessageActionTopicCreate):
-                    TOPICS_CACHE[msg.id] = msg.action.title.strip()
-                elif isinstance(msg.action, MessageActionTopicEdit) and msg.action.title:
-                    t_id = getattr(msg, 'reply_to_msg_id', None) or msg.id
-                    TOPICS_CACHE[t_id] = msg.action.title.strip()
+        offset_date = 0
+        offset_id = 0
+        offset_topic = 0
+        limit = 100
 
-            top_id = getattr(msg.reply_to, 'reply_to_top_id', None) or getattr(msg.reply_to, 'reply_to_msg_id', None)
-            if top_id and top_id not in TOPICS_CACHE:
-                if msg.text:
-                    first_line = msg.text.strip().split('\n')[0][:50]
-                    TOPICS_CACHE[top_id] = first_line
+        while True:
+            result = await client(GetForumTopicsRequest(
+                channel=group_peer,
+                offset_date=offset_date,
+                offset_id=offset_id,
+                offset_topic=offset_topic,
+                limit=limit
+            ))
+            
+            if not result.topics:
+                break
+
+            for topic in result.topics:
+                TOPICS_CACHE[topic.id] = topic.title.strip()
+
+            if len(result.topics) < limit:
+                break
+
+            last_topic = result.topics[-1]
+            offset_date = getattr(last_topic, 'date', 0)
+            offset_id = last_topic.id
+            offset_topic = last_topic.id
+
         print(f"✅ Baza tayyor: {len(TOPICS_CACHE)} ta mavzu yuklandi.", flush=True)
+        if TOPICS_CACHE:
+            first_few = list(TOPICS_CACHE.values())[:5]
+            print(f"📌 Yuklangan dastlabki kinolar: {first_few}", flush=True)
+
     except Exception as e:
         print(f"Xatolik mavzularni yuklashda: {e}", flush=True)
 
 def search_movies(query):
-    q_words = re.sub(r"[^\w\s]", "", query.lower()).split()
+    query_clean = re.sub(r"[^\w\s]", "", query.lower()).strip()
+    q_words = query_clean.split()
     if not q_words:
         return []
+
     results = []
+    # 1. To'liq moslik yoki barcha so'zlar qatnashgan mavzular
     for t_id, title in TOPICS_CACHE.items():
-        title_lower = title.lower()
-        if all(word in title_lower for word in q_words):
+        title_clean = re.sub(r"[^\w\s]", "", title.lower()).strip()
+        if all(word in title_clean for word in q_words):
             results.append((t_id, title))
             if len(results) >= 5:
+                return results
+
+    # 2. Agar topilmasa, so'zlardan kamida bittasi qatnashganlari
+    if not results and len(query_clean) >= 3:
+        for t_id, title in TOPICS_CACHE.items():
+            title_clean = re.sub(r"[^\w\s]", "", title.lower()).strip()
+            for word in q_words:
+                if len(word) >= 3 and word in title_clean:
+                    results.append((t_id, title))
+                    break
+            if len(results) >= 5:
                 break
+
     return results
 
-# Faqat guruhlarda kelgan xabarlarga javob qaytarish
 @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_group))
 async def auto_reply_handler(event):
     if getattr(event, 'out', False):
@@ -87,8 +117,6 @@ async def auto_reply_handler(event):
         response_text += f"\n✨ @FilimHudud Eng Sara Filmlar\n📚 To'liq ro'yxat: {MUNDARIJA_LINK}"
         await event.reply(response_text, link_preview=False)
     else:
-        # Guruhda hamma xabarga spam bo'lmasligi uchun faqat aniq kino so'ralganda javob berish ma'qul, 
-        # lekin topilmagan xabari kerak bo'lsa:
         response_text = (
             f"Afsuski, **'{text}'** topilmadi.\n"
             f"Barcha kinolar ro'yxati: {MUNDARIJA_LINK}"
