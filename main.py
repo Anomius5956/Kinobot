@@ -27,23 +27,25 @@ def clean_title(text):
 
 async def load_all_topics():
     global TOPICS_CACHE
-    print("⏳ Bazadagi barcha mavzular keshlanmoqda...")
-    group_peer = await client.get_input_entity(TARGET_GROUP_ID)
-    
-    async for msg in client.iter_messages(group_peer, reverse=True):
-        if msg.action:
-            if isinstance(msg.action, MessageActionTopicCreate):
-                TOPICS_CACHE[msg.id] = msg.action.title.strip()
-            elif isinstance(msg.action, MessageActionTopicEdit) and msg.action.title:
-                t_id = getattr(msg, 'reply_to_msg_id', None) or msg.id
-                TOPICS_CACHE[t_id] = msg.action.title.strip()
+    print("⏳ Bazadagi barcha mavzular keshlanmoqda...", flush=True)
+    try:
+        group_peer = await client.get_input_entity(TARGET_GROUP_ID)
+        async for msg in client.iter_messages(group_peer, reverse=True):
+            if msg.action:
+                if isinstance(msg.action, MessageActionTopicCreate):
+                    TOPICS_CACHE[msg.id] = msg.action.title.strip()
+                elif isinstance(msg.action, MessageActionTopicEdit) and msg.action.title:
+                    t_id = getattr(msg, 'reply_to_msg_id', None) or msg.id
+                    TOPICS_CACHE[t_id] = msg.action.title.strip()
 
-        top_id = getattr(msg.reply_to, 'reply_to_top_id', None) or getattr(msg.reply_to, 'reply_to_msg_id', None)
-        if top_id and top_id not in TOPICS_CACHE:
-            if msg.text:
-                first_line = msg.text.strip().split('\n')[0][:50]
-                TOPICS_CACHE[top_id] = first_line
-    print(f"✅ Baza tayyor: {len(TOPICS_CACHE)} ta mavzu yuklandi.")
+            top_id = getattr(msg.reply_to, 'reply_to_top_id', None) or getattr(msg.reply_to, 'reply_to_msg_id', None)
+            if top_id and top_id not in TOPICS_CACHE:
+                if msg.text:
+                    first_line = msg.text.strip().split('\n')[0][:50]
+                    TOPICS_CACHE[top_id] = first_line
+        print(f"✅ Baza tayyor: {len(TOPICS_CACHE)} ta mavzu yuklandi.", flush=True)
+    except Exception as e:
+        print(f"Xatolik mavzularni yuklashda: {e}", flush=True)
 
 def search_movies(query):
     q_words = re.sub(r"[^\w\s]", "", query.lower()).split()
@@ -60,7 +62,7 @@ def search_movies(query):
 
 @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
 async def auto_reply_handler(event):
-    if event.is_outgoing:
+    if getattr(event, 'out', False):
         return
     text = (event.raw_text or "").strip()
     if len(text) < 2:
@@ -98,14 +100,15 @@ async def start_web():
     app.router.add_get('/', handle_ping)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    print(f"🌐 Web-server port {port} da ishga tushdi", flush=True)
 
 async def main():
-    await client.start()
-    await load_all_topics()
     await start_web()
+    await client.start()
+    asyncio.create_task(load_all_topics())
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
