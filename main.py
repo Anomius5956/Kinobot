@@ -7,7 +7,10 @@ from telethon import TelegramClient, events
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
+
+# Faqat sizning guruhingiz ID'si
 TARGET_GROUP_ID = -1003025094654
+RAW_GROUP_ID = "3025094654"
 MUNDARIJA_LINK = "https://t.me/shaxsiybazamm"
 
 client = TelegramClient(
@@ -15,8 +18,6 @@ client = TelegramClient(
     API_ID, 
     API_HASH
 )
-
-RAW_GROUP_ID = "3025094654"
 
 TOPICS_CACHE = []
 if os.path.exists("topics.json"):
@@ -27,37 +28,25 @@ if os.path.exists("topics.json"):
                 for k, v in raw_data.items():
                     if isinstance(v, dict):
                         title = v.get("title") or k
-                        link = v.get("link") or f"https://t.me/c/{RAW_GROUP_ID}/{k}"
+                        # Havolani faqat sizning guruhingizga bog'laymiz
+                        raw_link = v.get("link", "")
+                        match = re.search(r"/(\d+)$", raw_link)
+                        post_id = match.group(1) if match else re.sub(r"\D", "", str(k))
                     else:
                         title = str(v)
-                        clean_id = re.sub(r"\D", "", str(k))
-                        link = f"https://t.me/c/{RAW_GROUP_ID}/{clean_id}"
-                    
-                    if title:
+                        post_id = re.sub(r"\D", "", str(k))
+
+                    if title and post_id:
                         clean_t = str(title).strip()
                         norm = re.sub(r"[^\w\s]", "", clean_t.lower()).strip()
                         TOPICS_CACHE.append({
                             "title": clean_t,
                             "norm": norm,
-                            "link": link
+                            "link": f"https://t.me/c/{RAW_GROUP_ID}/{post_id}"
                         })
-            elif isinstance(raw_data, list):
-                for item in raw_data:
-                    title = item.get("title", "")
-                    link = item.get("link", "")
-                    if title:
-                        clean_t = str(title).strip()
-                        norm = re.sub(r"[^\w\s]", "", clean_t.lower()).strip()
-                        TOPICS_CACHE.append({
-                            "title": clean_t,
-                            "norm": norm,
-                            "link": link
-                        })
-        print(f"✅ Baza tayyor: {len(TOPICS_CACHE)} ta kino va serial yuklandi.", flush=True)
+        print(f"✅ Baza tayyor: {len(TOPICS_CACHE)} ta kino yuklandi.", flush=True)
     except Exception as e:
         print(f"Baza o'qishda xatolik: {e}", flush=True)
-else:
-    print("⚠️ topics.json topilmadi!", flush=True)
 
 def clean_title(text):
     return re.sub(r"[\[\]_*~`]", "", text or "").strip()
@@ -70,33 +59,29 @@ def search_movies(query):
     q_words = query_clean.split()
     results = []
 
-    # 1. Barcha yozilgan so'zlar kino nomida bor bo'lsa
+    # 1. To'liq so'zlar mos kelishi
     for item in TOPICS_CACHE:
         if all(word in item["norm"] for word in q_words):
             results.append(item)
             if len(results) >= 5:
                 return results
 
-    # 2. Hech bo'lmasa bitta so'z mos kelsa (kamida 3 ta harfli so'z)
-    for item in TOPICS_CACHE:
-        if item in results:
-            continue
-        for word in q_words:
-            if len(word) >= 3 and word in item["norm"]:
-                results.append(item)
+    # 2. Qisman mos kelishi (kamida 3 ta harf)
+    if not results and len(query_clean) >= 3:
+        for item in TOPICS_CACHE:
+            for word in q_words:
+                if len(word) >= 3 and word in item["norm"]:
+                    results.append(item)
+                    break
+            if len(results) >= 5:
                 break
-        if len(results) >= 5:
-            break
 
     return results
 
-@client.on(events.NewMessage(incoming=True))
+# chats parametrida faqat sizning guruhingiz ko'rsatiladi
+@client.on(events.NewMessage(chats=[TARGET_GROUP_ID], incoming=True))
 async def auto_reply_handler(event):
     if getattr(event, 'out', False):
-        return
-
-    chat_str = str(event.chat_id).replace("-100", "").replace("-", "")
-    if chat_str != RAW_GROUP_ID:
         return
 
     text = (event.raw_text or "").strip()
