@@ -13,8 +13,8 @@ API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
 
 INVITE_HASH = "XVjpEsGZUDpkYzgy"
-TARGET_CHAT_ID = -1003025094654   # FilimHudud
-TARGET_TOPIC_ID = 53386           # 53386-mavzu
+TARGET_CHAT_ID = -1003025094654
+TARGET_TOPIC_ID = 53386
 
 NEW_SIGNATURE = "\n\n@FilimHudud Eng Sara Filmlar"
 HISTORY_FILE = "yuborilgan_xvjp.txt"
@@ -24,18 +24,16 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 processed_videos = set()
 for txt in glob.glob("yuborilgan_*.txt"):
     try:
-        with open(txt, "r", encoding="utf-8") as f:
-            for line in f:
+        with open(txt, "r", encoding="utf-8") as hf:
+            for line in hf:
                 item = line.strip()
                 if item: processed_videos.add(item)
     except Exception: pass
 
-print(f"Xotiradan {len(processed_videos)} ta yuborilgan video yuklandi.")
-
 def save_sig(sig):
     processed_videos.add(sig)
-    with open(HISTORY_FILE, "a", encoding="utf-8") as f:
-        f.write(f"{sig}\n"); f.flush(); os.fsync(f.fileno())
+    with open(HISTORY_FILE, "a", encoding="utf-8") as hf:
+        hf.write(f"{sig}\n"); hf.flush(); os.fsync(hf.fileno())
 
 def is_strict_video(msg):
     if not msg or not msg.media or getattr(msg, 'photo', None):
@@ -66,46 +64,57 @@ def get_sig(msg):
         return f"{doc.size}_{dur}"
     return f"id_{msg.id}"
 
-def clean_and_format_caption(old_text):
+def clean_and_format_caption(old_text, msg=None):
     text = old_text or ""
-    text = re.sub(r"(https?://\S+|t\.me/\S+|tg://\S+|www\.\S+)", "", text)
-    text = re.sub(r"#\w+", "", text)
-    text = re.sub(r"@\w+", "", text)
-    text = re.sub(r"(?i)(obuna bo['`]?ling|kanalimiz|bizning kanal|kanalga o['`]?tish|do['`]?stlarga ulashing|reklama|admin|homiy).*", "", text)
-    lines = [l.strip() for l in text.split("\n") if l.strip()]
-    cleaned_base = "\n".join(lines)
-    return (cleaned_base + NEW_SIGNATURE) if cleaned_base else "@FilimHudud Eng Sara Filmlar"
+    ep = None
+    m = re.search(r'(\d+)\s*[-_ ]*qism', text, re.IGNORECASE)
+    if m:
+        ep = m.group(1)
+    else:
+        if msg and msg.media and hasattr(msg.media, 'document') and msg.media.document:
+            for attr in msg.media.document.attributes:
+                if isinstance(attr, DocumentAttributeFilename):
+                    fname = attr.file_name or ""
+                    m2 = re.search(r'(\d+)\s*[-_ ]*qism', fname, re.IGNORECASE)
+                    if m2:
+                        ep = m2.group(1)
+                        break
+                    m3 = re.search(r'(\d+)', fname)
+                    if m3:
+                        ep = m3.group(1)
+                        break
+
+    if ep:
+        return f"🎬 Kelin hind seriali {ep}-qism{NEW_SIGNATURE}"
+
+    text = re.sub(r'\[.*?\]\(.*?\)', '', text)
+    text = re.sub(r'\[.*?\]', '', text)
+    text = re.sub(r'\(.*?\)', '', text)
+    text = re.sub(r'(https?://\S+|t\.me/\S+|tg://\S+|www\.\S+)', '', text)
+    text = re.sub(r'#\w+', '', text)
+    text = re.sub(r'@\w+', '', text)
+    text = re.sub(r'(?i)(asosiy kanal|bizga qo['`]?shiling|kanalimiz|bizning kanal|kanalga o['`]?tish|do['`]?stlarga ulashing|reklama|admin|homiy|juda kop).*', '', text)
+    cleaned = "\n".join([l.strip() for l in text.split("\n") if l.strip()])
+    return f"🎬 Kelin hind seriali{NEW_SIGNATURE}" if not cleaned else f"🎬 {cleaned}{NEW_SIGNATURE}"
 
 async def send_safely(client, msg, target_peer, topic_id, caption):
     t_start = time.time()
-    
-    # 1-usul: Server orqali to'g'ridan-to'g'ri o'tkazish
     try:
         await asyncio.wait_for(
-            client.send_message(
-                target_peer,
-                file=msg.media,
-                message=caption,
-                reply_to=topic_id
-            ),
+            client.send_message(target_peer, file=msg.media, message=caption, reply_to=topic_id),
             timeout=25.0
         )
         elapsed = round(time.time() - t_start, 2)
-        return True, f"server orqali {elapsed} soniyada o'tkazildi"
+        return True, f"server orqali {elapsed} soniyada"
     except Exception:
         pass
 
-    # 2-usul: Agar server to'g'ridan-to'g'ri bermasa, yuklab yuborish
     temp_file = thumb_path = None
     try:
-        try:
-            thumb_path = await client.download_media(msg.media, file=TEMP_DIR, thumb=-1)
-        except Exception:
-            thumb_path = None
-
+        try: thumb_path = await client.download_media(msg.media, file=TEMP_DIR, thumb=-1)
+        except Exception: thumb_path = None
         temp_file = await client.download_media(msg.media, file=TEMP_DIR)
         doc_attrs = getattr(msg.media.document, 'attributes', None) if hasattr(msg.media, 'document') else None
-
         await client.send_file(
             target_peer,
             file=temp_file,
@@ -116,7 +125,7 @@ async def send_safely(client, msg, target_peer, topic_id, caption):
             supports_streaming=True
         )
         elapsed = round(time.time() - t_start, 2)
-        return True, f"yuklab yuborish orqali {elapsed} soniyada yakunlandi"
+        return True, f"yuklab yuborish orqali {elapsed} soniyada"
     except Exception as e:
         return False, str(e)
     finally:
@@ -130,35 +139,29 @@ async def send_safely(client, msg, target_peer, topic_id, caption):
 async def process_msg(client, msg, target_peer, topic_id):
     sig = get_sig(msg)
     if sig in processed_videos:
-        print(f"-> [{msg.id}] Oldin yuborilgan, tashlab ketildi.")
         return
 
-    caption = clean_and_format_caption(msg.text or "")
-    print(f"-> [{msg.id}] Jarayon boshlandi...")
+    caption = clean_and_format_caption(msg.text or "", msg)
     try:
         ok, detail = await send_safely(client, msg, target_peer, topic_id, caption)
         if ok:
-            print(f"✓ [{msg.id}] 53386-mavzuga joylandi ({detail})")
+            print(f"✓ [{msg.id}] Mavzuga joylandi ({detail})")
             save_sig(sig)
-        else:
-            print(f"✗ [{msg.id}] Xatolik: {detail}")
         await asyncio.sleep(2)
     except FloodWaitError as e:
-        print(f"Telegram cheklovi: {e.seconds} soniya kutilmoqda...")
+        print(f"Telegram cheklovi: {e.seconds}s...")
         await asyncio.sleep(e.seconds + 2)
     except Exception as e:
-        print(f"[{msg.id}] Kutilmagan xato: {e}")
+        print(f"[{msg.id}] Xato: {e}")
         await asyncio.sleep(1)
 
 async def run_worker():
     client = TelegramClient("salikhmult_session", API_ID, API_HASH, auto_reconnect=True, connection_retries=10, retry_delay=5)
     await client.connect()
-
     if not await client.is_user_authorized():
         await client.start()
 
     await client.get_dialogs(limit=30)
-
     try:
         updates = await client(ImportChatInviteRequest(INVITE_HASH))
         source_chat = updates.chats[0]
@@ -166,24 +169,19 @@ async def run_worker():
         check = await client(CheckChatInviteRequest(INVITE_HASH))
         source_chat = check.chat
     except Exception as e:
-        print(f"Kanalga ulanishda xato: {e}")
+        print(f"Ulanishda xato: {e}")
         return
 
-    print(f"Kanal aniqlandi: {getattr(source_chat, 'title', 'Kelin')}")
     source_peer = await client.get_input_entity(source_chat)
     target_peer = await client.get_input_entity(TARGET_CHAT_ID)
 
-    print("\nVideolar 53386-mavzuga ko'chirilmoqda...")
     async for msg in client.iter_messages(source_peer, reverse=True):
         if is_strict_video(msg):
             await process_msg(client, msg, target_peer, TARGET_TOPIC_ID)
 
-    print("\nBarcha qismlar muvaffaqiyatli ko'chirildi!")
-
     @client.on(events.NewMessage(chats=source_chat.id))
     async def new_vid(event):
         if is_strict_video(event.message):
-            print(f"\nYangi qism chiqdi: ID {event.message.id}")
             await process_msg(client, event.message, target_peer, TARGET_TOPIC_ID)
 
     await client.run_until_disconnected()
