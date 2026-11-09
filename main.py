@@ -1,5 +1,6 @@
 import asyncio, glob, os, re, sys, time
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError, UserAlreadyParticipantError
 from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest
 from telethon.tl.types import (
@@ -13,6 +14,7 @@ sys.stdout.reconfigure(line_buffering=True)
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
+SESSION_STRING = "1ApWapzMBu4L8hW97fZ3d1-NcV6PjqYsc1m2b6wpSympVzXQ4DdHrd0usBnvRlNd196R5FCMonCNVhmLu0Xzmdt-bJg4ebVr_r2nuXAuGL2YQ1mfjBN-8FKAuAqEqo305LJC8KIteT5gaJf9ybztJAa5UQPiR39YurtaQh8bdkBarPaM1o1sogImHGexmZsd8HclSGvJiFEr7SoXxx6aOT8we0mePCwYIe__7yA4_PHynWfxH8MLh0pyqPcGSY4qLaiI03dtq-QW-YKMGiARi4ED4kf0v2TwEKduHGA8TFgP9ZK1bkbAPAa6MNUKzHpcbJavL_bt0MTxzdfNtA6LAk7VJyRKQpek="
 
 INVITE_HASH = "XVjpEsGZUDpkYzgy"
 TARGET_CHAT_ID = -1003025094654
@@ -169,6 +171,7 @@ async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
 async def process_msg(client, msg, target_peer, topic_id, ep_num):
     actual_ep, caption = get_clean_caption(msg, ep_num)
 
+    # 9-qismdan kichiklarini o'tkazib yuborish
     if actual_ep < 9:
         return
 
@@ -201,8 +204,7 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
             await asyncio.sleep(3)
 
 async def run_worker():
-    sess_name = "active_server_session" if os.path.exists("active_server_session.session") else "online_server_session"
-    client = TelegramClient(sess_name, API_ID, API_HASH, auto_reconnect=True, connection_retries=20, retry_delay=5)
+    client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH, auto_reconnect=True, connection_retries=20, retry_delay=5)
     await client.connect()
     if not await client.is_user_authorized():
         print("❌ Xato: Sessiya tasdiqlanmagan!", flush=True)
