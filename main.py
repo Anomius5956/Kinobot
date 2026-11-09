@@ -1,6 +1,5 @@
 import asyncio, glob, os, re, sys, time
 from telethon import TelegramClient, events
-from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError, UserAlreadyParticipantError
 from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest
 from telethon.tl.types import (
@@ -14,9 +13,6 @@ sys.stdout.reconfigure(line_buffering=True)
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
-
-# Yangi yaratilgan StringSession kaliti
-SESSION_STRING = "1ApWapzMBu2YCSe5jELQr76Dm4a3vsw2BtECgVi1taTfimdv6OHxOeW4jHj3YG9FpujhN1N1ZwDWxL8f4Cf9JFgQzvPfxIKIQT-fyMx-0mOYYHJ4w9bdd3udHHfiZ2ZhHfKt3LkR5wQbskombwV8erHbyHHxf7fOvz9Uzp5uQHnHhOttFW8g_d3alGHLeEZDkmE30NAQv-_9kWakTzTJYscMELg1G9PVvRKBg3veimqdo7hdEH9167X6m8hGRFW_EAuW3KVTAn3HVS4PZeMdv1adWX6iGRdeEafUddwhS1jIksWVKhpX-skOUmoJ3NQ_Lq6eaUDCH7GsGRkoqU4U5abInIeyXV8="
 
 INVITE_HASH = "XVjpEsGZUDpkYzgy"
 TARGET_CHAT_ID = -1003025094654
@@ -38,7 +34,7 @@ for txt in glob.glob("yuborilgan_*.txt"):
     except Exception:
         pass
 
-print(f"Xotiradan {len(processed_videos)} ta yuborilgan video yuklandi.", flush=True)
+print(f"Baza yuklandi: {len(processed_videos)} ta yuborilgan video mavjud.", flush=True)
 
 def save_sig(sig):
     processed_videos.add(sig)
@@ -205,7 +201,8 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
             await asyncio.sleep(3)
 
 async def run_worker():
-    client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH, auto_reconnect=True, connection_retries=20, retry_delay=5)
+    sess_name = "active_server_session" if os.path.exists("active_server_session.session") else "online_server_session"
+    client = TelegramClient(sess_name, API_ID, API_HASH, auto_reconnect=True, connection_retries=20, retry_delay=5)
     await client.connect()
     if not await client.is_user_authorized():
         print("❌ Xato: Sessiya tasdiqlanmagan!", flush=True)
