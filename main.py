@@ -172,7 +172,7 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
     actual_ep, caption = get_clean_caption(msg, ep_num)
 
     # 9-qismdan kichiklarini o'tkazib yuborish
-    if actual_ep < 9:
+    if actual_ep < 13:
         return
 
     sig = get_sig(msg)
@@ -229,7 +229,7 @@ async def run_worker():
 
     current_episode_counter = 0
 
-    print("Videolar tekshirilmoqda (9-qismdan boshlanadi)...", flush=True)
+    print("Videolar tekshirilmoqda (13-qismdan boshlanadi)...", flush=True)
     async for msg in client.iter_messages(source_peer, reverse=True):
         if is_strict_video(msg):
             current_episode_counter += 1
