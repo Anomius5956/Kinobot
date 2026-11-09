@@ -186,7 +186,7 @@ async def process_msg(client, msg, target_peer, topic_id):
         await asyncio.sleep(1)
 
 async def run_worker():
-    client = TelegramClient("salikhmult_session", API_ID, API_HASH, auto_reconnect=True, connection_retries=10, retry_delay=5)
+    client = TelegramClient("railway_session", API_ID, API_HASH, auto_reconnect=True, connection_retries=10, retry_delay=5)
     await client.connect()
     if not await client.is_user_authorized():
         await client.start()
