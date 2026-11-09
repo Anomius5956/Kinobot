@@ -14,13 +14,13 @@ sys.stdout.reconfigure(line_buffering=True)
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
-SESSION_STRING = "1ApWapzMBu4L8hW97fZ3d1-NcV6PjqYsc1m2b6wpSympVzXQ4DdHrd0usBnvRlNd196R5FCMonCNVhmLu0Xzmdt-bJg4ebVr_r2nuXAuGL2YQ1mfjBN-8FKAuAqEqo305LJC8KIteT5gaJf9ybztJAa5UQPiR39YurtaQh8bdkBarPaM1o1sogImHGexmZsd8HclSGvJiFEr7SoXxx6aOT8we0mePCwYIe__7yA4_PHynWfxH8MLh0pyqPcGSY4qLaiI03dtq-QW-YKMGiARi4ED4kf0v2TwEKduHGA8TFgP9ZK1bkbAPAa6MNUKzHpcbJavL_bt0MTxzdfNtA6LAk7VJyRKQpek="
+SESSION_STR = "1ApWapzMBuyHx4clicrt9HAWWTUL9C1exIInyH8mPNAf6Ap0vD9tH-2H4A_JITPQoDtyyEsCvLngR6S2WCil4vfzehN0g-Nc6HowB3046T4FrpRcV7VOfqwcr5ZY4oa18Ke4lC3WRrcct_Jm5QKW3rIJhqfij2d440VgFXv2ZlNS8lF9QWg798-TEf1K1v3K7-yekkWD_q0DD0sBR0R1sdrsEmzcw9n_SKcB9MdD1M_zyvHPDpluJj4iGVkKsmySgeBOb5P8TqsY_OCWu8d-lxcNpjnGOReVe7CKYMan3kmSRVZRUYJEud527BnYEk3P36ilE1plk3cQwdjRs3AT_1HIKbsCPVjY="
 
 INVITE_HASH = "XVjpEsGZUDpkYzgy"
 TARGET_CHAT_ID = -1003025094654
 TARGET_TOPIC_ID = 53386
 
-NEW_SIGNATURE = "\n\n@FilimHudud Eng Sara Filmlar"
+SIGNATURE = "\n\n@FilimHudud Eng Sara Filmlar"
 HISTORY_FILE = "yuborilgan_xvjp.txt"
 TEMP_DIR = "temp_media_xvjp"
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -36,7 +36,7 @@ for txt in glob.glob("yuborilgan_*.txt"):
     except Exception:
         pass
 
-print(f"Baza yuklandi: {len(processed_videos)} ta yuborilgan video mavjud.", flush=True)
+print(f"Xotiradan {len(processed_videos)} ta yuborilgan video yuklandi.", flush=True)
 
 def save_sig(sig):
     processed_videos.add(sig)
@@ -75,7 +75,7 @@ def get_sig(msg):
         return f"{doc.size}_{dur}"
     return f"id_{msg.id}"
 
-def get_clean_caption(msg, fallback_ep_num):
+def build_caption(msg, fallback_ep_num):
     raw_text = msg.text or ""
     found_num = None
 
@@ -97,7 +97,7 @@ def get_clean_caption(msg, fallback_ep_num):
                         break
 
     actual_ep = found_num if found_num else fallback_ep_num
-    caption = f"🎬 Kelin hind seriali {actual_ep}-qism{NEW_SIGNATURE}"
+    caption = f"🎬 Kelin hind seriali {actual_ep}-qism{SIGNATURE}"
     return actual_ep, caption
 
 class ProgressTracker:
@@ -120,19 +120,22 @@ class ProgressTracker:
 
 async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
     t_start = time.time()
+    
+    # 1-usul: Server orqali to'g'ridan-to'g'ri o'tkazish (IP to'qnashmaydi, 1 soniya oladi)
     try:
         await asyncio.wait_for(
             client.send_message(target_peer, file=msg.media, message=caption, reply_to=topic_id),
-            timeout=15.0
+            timeout=25.0
         )
         elapsed = round(time.time() - t_start, 2)
-        return True, f"server orqali {elapsed}s da"
+        return True, f"server orqali to'g'ridan-to'g'ri ({elapsed}s)"
     except Exception:
         pass
 
+    # 2-usul: Agar server o'tkazmasa, disk orqali yuklab uzatish
     temp_file = thumb_path = None
     try:
-        print(f"[{ep_num}-qism] Serverga yuklab olish...", flush=True)
+        print(f"[{ep_num}-qism] Server orqali yuklab olish boshlandi...", flush=True)
         try:
             thumb_path = await client.download_media(msg.media, file=TEMP_DIR, thumb=-1)
         except Exception:
@@ -142,8 +145,7 @@ async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
         temp_file = await client.download_media(msg.media, file=TEMP_DIR, progress_callback=prog_down)
 
         doc_attrs = getattr(msg.media.document, 'attributes', None) if hasattr(msg.media, 'document') else None
-
-        print(f"[{ep_num}-qism] Mavzuga jo'natilmoqda...", flush=True)
+        print(f"[{ep_num}-qism] Mavzuga yuklanmoqda...", flush=True)
         prog_up = ProgressTracker("Jo'natilmoqda", ep_num)
 
         await client.send_file(
@@ -157,7 +159,7 @@ async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
             progress_callback=prog_up
         )
         elapsed = round(time.time() - t_start, 2)
-        return True, f"yuklab jo'natish orqali {elapsed}s da"
+        return True, f"faylni qayta yuklab jo'natish ({elapsed}s)"
     except Exception as e:
         return False, str(e)
     finally:
@@ -169,9 +171,9 @@ async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
             except Exception: pass
 
 async def process_msg(client, msg, target_peer, topic_id, ep_num):
-    actual_ep, caption = get_clean_caption(msg, ep_num)
+    actual_ep, caption = build_caption(msg, ep_num)
 
-    # 9-qismdan kichiklarini o'tkazib yuborish
+    # 13-qismdan kichiklarini o'tkazib yuborish
     if actual_ep < 13:
         return
 
@@ -180,7 +182,7 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
         return
 
     print(f"\n==========================================", flush=True)
-    print(f"➡️ Navbatdagi: {actual_ep}-qism (ID: {msg.id})", flush=True)
+    print(f"➡️ Navbatdagi: {actual_ep}-qism (Xabar ID: {msg.id})", flush=True)
 
     retry_count = 0
     while retry_count < 3:
@@ -189,29 +191,38 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
             if ok:
                 print(f"✅ {caption.splitlines()[0]} joylandi! ({detail})", flush=True)
                 save_sig(sig)
-                await asyncio.sleep(2)
+                await asyncio.sleep(3)
                 return
             else:
                 print(f"⚠️ [{actual_ep}-qism] Qayta urinilmoqda ({detail})...", flush=True)
                 retry_count += 1
-                await asyncio.sleep(3)
+                await asyncio.sleep(4)
         except FloodWaitError as e:
-            print(f"⏳ FloodWait: {e.seconds}s...", flush=True)
+            print(f"⏳ FloodWait: {e.seconds}s kutilmoqda...", flush=True)
             await asyncio.sleep(e.seconds + 2)
         except Exception as e:
-            print(f"❌ Xato: {e}", flush=True)
+            print(f"❌ Xatolik: {e}", flush=True)
             retry_count += 1
-            await asyncio.sleep(3)
+            await asyncio.sleep(4)
 
 async def run_worker():
-    client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH, auto_reconnect=True, connection_retries=20, retry_delay=5)
+    # Telegram mijozini IP buzilishi va ko'p DC ulanishlaridan himoyalash
+    client = TelegramClient(
+        StringSession(SESSION_STR),
+        API_ID,
+        API_HASH,
+        auto_reconnect=True,
+        connection_retries=None,
+        retry_delay=5,
+        flood_sleep_threshold=120
+    )
     await client.connect()
     if not await client.is_user_authorized():
         print("❌ Xato: Sessiya tasdiqlanmagan!", flush=True)
         return
 
     me = await client.get_me()
-    print(f"Bot akkaunti: {me.first_name} faol.", flush=True)
+    print(f"Bot akkaunti: {me.first_name} (@{me.username or 'yoq'}) faol.", flush=True)
     await client.get_dialogs(limit=30)
 
     try:
@@ -221,7 +232,7 @@ async def run_worker():
         check = await client(CheckChatInviteRequest(INVITE_HASH))
         source_chat = check.chat
     except Exception as e:
-        print(f"Kanalga ulanish xatosi: {e}", flush=True)
+        print(f"Kanalga ulanishda xato: {e}", flush=True)
         return
 
     source_peer = await client.get_input_entity(source_chat)
@@ -229,13 +240,13 @@ async def run_worker():
 
     current_episode_counter = 0
 
-    print("Videolar tekshirilmoqda (13-qismdan boshlanadi)...", flush=True)
+    print("Videolar tekshirilmoqda (13-qismdan boshlab yuklanadi)...", flush=True)
     async for msg in client.iter_messages(source_peer, reverse=True):
         if is_strict_video(msg):
             current_episode_counter += 1
             await process_msg(client, msg, target_peer, TARGET_TOPIC_ID, current_episode_counter)
 
-    print("Barcha mavjud qismlar joylandi! Yangi qismlar kutilmoqda...", flush=True)
+    print("Mavjud barcha qismlar joylandi! Yangi qismlar kutilmoqda...", flush=True)
 
     @client.on(events.NewMessage(chats=source_chat.id))
     async def new_vid(event):
