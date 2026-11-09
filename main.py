@@ -1,5 +1,6 @@
 import asyncio, glob, os, re, sys, time
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 from telethon.errors import FloodWaitError, UserAlreadyParticipantError
 from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest
 from telethon.tl.types import (
@@ -13,6 +14,9 @@ sys.stdout.reconfigure(line_buffering=True)
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
+
+# Yangi yaratilgan StringSession kaliti
+SESSION_STRING = "1ApWapzMBu2YCSe5jELQr76Dm4a3vsw2BtECgVi1taTfimdv6OHxOeW4jHj3YG9FpujhN1N1ZwDWxL8f4Cf9JFgQzvPfxIKIQT-fyMx-0mOYYHJ4w9bdd3udHHfiZ2ZhHfKt3LkR5wQbskombwV8erHbyHHxf7fOvz9Uzp5uQHnHhOttFW8g_d3alGHLeEZDkmE30NAQv-_9kWakTzTJYscMELg1G9PVvRKBg3veimqdo7hdEH9167X6m8hGRFW_EAuW3KVTAn3HVS4PZeMdv1adWX6iGRdeEafUddwhS1jIksWVKhpX-skOUmoJ3NQ_Lq6eaUDCH7GsGRkoqU4U5abInIeyXV8="
 
 INVITE_HASH = "XVjpEsGZUDpkYzgy"
 TARGET_CHAT_ID = -1003025094654
@@ -130,7 +134,7 @@ async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
 
     temp_file = thumb_path = None
     try:
-        print(f"[{ep_num}-qism] Yuklab olish boshlandi...", flush=True)
+        print(f"[{ep_num}-qism] Serverga yuklab olish...", flush=True)
         try:
             thumb_path = await client.download_media(msg.media, file=TEMP_DIR, thumb=-1)
         except Exception:
@@ -169,7 +173,6 @@ async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
 async def process_msg(client, msg, target_peer, topic_id, ep_num):
     actual_ep, caption = get_clean_caption(msg, ep_num)
 
-    # 9-qismdan kichiklarini tashlab o'tish
     if actual_ep < 9:
         return
 
@@ -185,7 +188,7 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
         try:
             ok, detail = await send_safely(client, msg, target_peer, topic_id, caption, actual_ep)
             if ok:
-                print(f"✅ {caption.splitlines()[0]} mavzuga joylandi! ({detail})", flush=True)
+                print(f"✅ {caption.splitlines()[0]} joylandi! ({detail})", flush=True)
                 save_sig(sig)
                 await asyncio.sleep(2)
                 return
@@ -194,16 +197,15 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
                 retry_count += 1
                 await asyncio.sleep(3)
         except FloodWaitError as e:
-            print(f"⏳ Telegram FloodWait: {e.seconds}s...", flush=True)
+            print(f"⏳ FloodWait: {e.seconds}s...", flush=True)
             await asyncio.sleep(e.seconds + 2)
         except Exception as e:
-            print(f"❌ Xatolik: {e}", flush=True)
+            print(f"❌ Xato: {e}", flush=True)
             retry_count += 1
             await asyncio.sleep(3)
 
 async def run_worker():
-    session_file = "active_server_session" if os.path.exists("active_server_session.session") else "online_server_session"
-    client = TelegramClient(session_file, API_ID, API_HASH, auto_reconnect=True, connection_retries=20, retry_delay=5)
+    client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH, auto_reconnect=True, connection_retries=20, retry_delay=5)
     await client.connect()
     if not await client.is_user_authorized():
         print("❌ Xato: Sessiya tasdiqlanmagan!", flush=True)
@@ -220,7 +222,7 @@ async def run_worker():
         check = await client(CheckChatInviteRequest(INVITE_HASH))
         source_chat = check.chat
     except Exception as e:
-        print(f"Kanalga ulanishda xato: {e}", flush=True)
+        print(f"Kanalga ulanish xatosi: {e}", flush=True)
         return
 
     source_peer = await client.get_input_entity(source_chat)
@@ -228,13 +230,13 @@ async def run_worker():
 
     current_episode_counter = 0
 
-    print("Videolar ko'rib chiqilmoqda (9-qism va undan keyingilari yuklanadi)...", flush=True)
+    print("Videolar tekshirilmoqda (9-qismdan boshlanadi)...", flush=True)
     async for msg in client.iter_messages(source_peer, reverse=True):
         if is_strict_video(msg):
             current_episode_counter += 1
             await process_msg(client, msg, target_peer, TARGET_TOPIC_ID, current_episode_counter)
 
-    print("Barcha mavjud serial qismlari joylandi! Yangi qismlar kutilmoqda...", flush=True)
+    print("Barcha mavjud qismlar joylandi! Yangi qismlar kutilmoqda...", flush=True)
 
     @client.on(events.NewMessage(chats=source_chat.id))
     async def new_vid(event):
