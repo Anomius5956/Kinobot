@@ -250,3 +250,13 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(main())
+import asyncio
+from aiohttp import web
+from telethon import TelegramClient
+from telethon.sessions import StringSession
+
+API_ID = 35656569
+API_HASH = "f7d00012a8701d50015ae3d051e402fe"
+SESSION_STRING = "1ApWapzMBu2ZC2f0W36mWvZtZhF0CUAaxhwysO77TcrzMEWauMFCc_noHOT3Kz9Lqy75mL8faJTK00FRTUkt4lAaP2KD31uQpTAeXpPeIcx0dyHB1wpxl4zySysXwU6nhH8dggf-YhLT_0Y2JUnyzoTvJO1qMHWjaBWRdAGSE9iAppt2yI955el7sK2LWj7aGiAj4eXJOuyGAoln4AVmqaoj1KI7tC5lOUCBichvJF79AjgXEPMSmfTYj44mn0APZR1FkzPP-JXeRTkDWrWRQtlW8jWQOds6dQr5E85wBTMqF74wyE7EvhdOi4Ttm_Dtlf4oVWdtFHR5uo-CzTO9idXo0bQsGDzE="
+
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
