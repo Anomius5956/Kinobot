@@ -1,4 +1,4 @@
-import asyncio, glob, math, os, re, time
+import asyncio, glob, os, re, time
 from telethon import TelegramClient, events
 from telethon.errors import FloodWaitError, UserAlreadyParticipantError
 from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest
@@ -6,9 +6,7 @@ from telethon.tl.types import (
     MessageMediaDocument,
     DocumentAttributeVideo,
     DocumentAttributeAnimated,
-    DocumentAttributeFilename,
-    InputFileLocation,
-    InputDocumentFileLocation
+    DocumentAttributeFilename
 )
 
 API_ID = 35656569
@@ -66,66 +64,46 @@ def get_sig(msg):
         return f"{doc.size}_{dur}"
     return f"id_{msg.id}"
 
-def clean_and_format_caption(old_text, msg=None):
-    text = old_text or ""
-    ep = None
-    m = re.search(r'(\d+)\s*[-_ ]*qism', text, re.IGNORECASE)
-    if m:
-        ep = m.group(1)
+def get_clean_caption(msg, fallback_ep_num):
+    raw_text = msg.text or ""
+    found_num = None
+
+    m1 = re.search(r'(\d+)\s*[-_ ]*qism', raw_text, re.IGNORECASE)
+    if m1:
+        found_num = m1.group(1)
     else:
-        if msg and msg.media and hasattr(msg.media, 'document') and msg.media.document:
+        if msg.media and hasattr(msg.media, 'document') and msg.media.document:
             for attr in msg.media.document.attributes:
                 if isinstance(attr, DocumentAttributeFilename):
                     fname = attr.file_name or ""
                     m2 = re.search(r'(\d+)\s*[-_ ]*qism', fname, re.IGNORECASE)
                     if m2:
-                        ep = m2.group(1); break
-                    m3 = re.search(r'(\d+)', fname)
+                        found_num = m2.group(1); break
+                    m3 = re.search(r'(?:e|ep|episode|\b)(\d+)\b', fname, re.IGNORECASE)
                     if m3:
-                        ep = m3.group(1); break
+                        found_num = m3.group(1); break
 
-    if ep:
-        return f"🎬 Kelin hind seriali {ep}-qism{NEW_SIGNATURE}"
-
-    bad_patterns = [
-        r"https?://\S+", r"t\.me/\S+", r"tg://\S+", r"www\.\S+",
-        r"@\w+", r"#\w+", r"\[.*?\]", r"\(.*?\)",
-        r"(?i)asosiy kanal.*", r"(?i)bizga qo['`]?shiling.*",
-        r"(?i)kanalimiz.*", r"(?i)bizning kanal.*",
-        r"(?i)kanalga o['`]?tish.*", r"(?i)do['`]?stlarga ulashing.*",
-        r"(?i)reklama.*", r"(?i)admin.*", r"(?i)homiy.*", r"(?i)juda kop.*"
-    ]
-    for p in bad_patterns:
-        text = re.sub(p, "", text)
-
-    cleaned = "\n".join([line.strip() for line in text.split("\n") if line.strip()])
-    return f"🎬 {cleaned}{NEW_SIGNATURE}" if cleaned else f"🎬 Kelin hind seriali{NEW_SIGNATURE}"
+    ep_str = str(found_num) if found_num else str(fallback_ep_num)
+    return f"🎬 Kelin hind seriali {ep_str}-qism{NEW_SIGNATURE}"
 
 async def send_safely(client, msg, target_peer, topic_id, caption):
     t_start = time.time()
-    
-    # 1. To'g'ridan-to'g'ri Telegram serveri orqali o'tkazish (eng tez usul, 1-2 soniya)
     try:
         await asyncio.wait_for(
             client.send_message(target_peer, file=msg.media, message=caption, reply_to=topic_id),
             timeout=20.0
         )
         elapsed = round(time.time() - t_start, 2)
-        return True, f"server orqali {elapsed} soniyada"
+        return True, f"server orqali {elapsed}s"
     except Exception:
         pass
 
-    # 2. Agar server ruxsat bermasa, yuklab yuborish
     temp_file = thumb_path = None
     try:
-        try:
-            thumb_path = await client.download_media(msg.media, file=TEMP_DIR, thumb=-1)
-        except Exception:
-            thumb_path = None
-
+        try: thumb_path = await client.download_media(msg.media, file=TEMP_DIR, thumb=-1)
+        except Exception: thumb_path = None
         temp_file = await client.download_media(msg.media, file=TEMP_DIR)
         doc_attrs = getattr(msg.media.document, 'attributes', None) if hasattr(msg.media, 'document') else None
-
         await client.send_file(
             target_peer,
             file=temp_file,
@@ -136,41 +114,23 @@ async def send_safely(client, msg, target_peer, topic_id, caption):
             supports_streaming=True
         )
         elapsed = round(time.time() - t_start, 2)
-        return True, f"yuklab yuborish orqali {elapsed} soniyada"
+        return True, f"yuklab yuborish orqali {elapsed}s"
     except Exception as e:
         return False, str(e)
     finally:
         if temp_file and os.path.exists(temp_file):
             try: os.remove(temp_file)
-            except: pass
+            except Exception: pass
         if thumb_path and os.path.exists(thumb_path):
             try: os.remove(thumb_path)
-            except: pass
-
-async def process_msg(client, msg, target_peer, topic_id):
-    sig = get_sig(msg)
-    if sig in processed_videos:
-        return
-
-    caption = clean_and_format_caption(msg.text or "", msg)
-    try:
-        ok, detail = await send_safely(client, msg, target_peer, topic_id, caption)
-        if ok:
-            print(f"✓ [{msg.id}] Mavzuga joylandi ({detail})")
-            save_sig(sig)
-        await asyncio.sleep(2)
-    except FloodWaitError as e:
-        print(f"Telegram cheklovi: {e.seconds}s...")
-        await asyncio.sleep(e.seconds + 2)
-    except Exception as e:
-        print(f"[{msg.id}] Xato: {e}")
-        await asyncio.sleep(1)
+            except Exception: pass
 
 async def run_worker():
-    client = TelegramClient("railway_session", API_ID, API_HASH, auto_reconnect=True, connection_retries=10, retry_delay=5)
+    client = TelegramClient("online_server_session", API_ID, API_HASH, auto_reconnect=True, connection_retries=10, retry_delay=5)
     await client.connect()
     if not await client.is_user_authorized():
-        await client.start()
+        print("Sessiya avtorizatsiyadan o'tmagan!")
+        return
 
     await client.get_dialogs(limit=30)
     try:
@@ -186,14 +146,40 @@ async def run_worker():
     source_peer = await client.get_input_entity(source_chat)
     target_peer = await client.get_input_entity(TARGET_CHAT_ID)
 
+    current_episode_counter = 0
+
     async for msg in client.iter_messages(source_peer, reverse=True):
         if is_strict_video(msg):
-            await process_msg(client, msg, target_peer, TARGET_TOPIC_ID)
+            current_episode_counter += 1
+            sig = get_sig(msg)
+            if sig in processed_videos:
+                continue
+
+            caption = get_clean_caption(msg, current_episode_counter)
+            try:
+                ok, detail = await send_safely(client, msg, target_peer, TARGET_TOPIC_ID, caption)
+                if ok:
+                    print(f"✓ [{msg.id}] {caption.splitlines()[0]} joylandi ({detail})")
+                    save_sig(sig)
+                await asyncio.sleep(2)
+            except FloodWaitError as e:
+                print(f"FloodWait: {e.seconds}s...")
+                await asyncio.sleep(e.seconds + 2)
+            except Exception as e:
+                print(f"Xato: {e}")
+                await asyncio.sleep(1)
 
     @client.on(events.NewMessage(chats=source_chat.id))
     async def new_vid(event):
+        nonlocal current_episode_counter
         if is_strict_video(event.message):
-            await process_msg(client, event.message, target_peer, TARGET_TOPIC_ID)
+            current_episode_counter += 1
+            sig = get_sig(event.message)
+            if sig not in processed_videos:
+                cap = get_clean_caption(event.message, current_episode_counter)
+                ok, detail = await send_safely(client, event.message, target_peer, TARGET_TOPIC_ID, cap)
+                if ok:
+                    save_sig(sig)
 
     await client.run_until_disconnected()
 
