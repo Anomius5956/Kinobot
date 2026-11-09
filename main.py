@@ -14,7 +14,6 @@ sys.stdout.reconfigure(line_buffering=True)
 
 API_ID = 35656569
 API_HASH = "f7d00012a8701d50015ae3d051e402fe"
-SESSION_STR = "1ApWapzMBuyHx4clicrt9HAWWTUL9C1exIInyH8mPNAf6Ap0vD9tH-2H4A_JITPQoDtyyEsCvLngR6S2WCil4vfzehN0g-Nc6HowB3046T4FrpRcV7VOfqwcr5ZY4oa18Ke4lC3WRrcct_Jm5QKW3rIJhqfij2d440VgFXv2ZlNS8lF9QWg798-TEf1K1v3K7-yekkWD_q0DD0sBR0R1sdrsEmzcw9n_SKcB9MdD1M_zyvHPDpluJj4iGVkKsmySgeBOb5P8TqsY_OCWu8d-lxcNpjnGOReVe7CKYMan3kmSRVZRUYJEud527BnYEk3P36ilE1plk3cQwdjRs3AT_1HIKbsCPVjY="
 
 INVITE_HASH = "XVjpEsGZUDpkYzgy"
 TARGET_CHAT_ID = -1003025094654
@@ -36,7 +35,7 @@ for txt in glob.glob("yuborilgan_*.txt"):
     except Exception:
         pass
 
-print(f"Xotiradan {len(processed_videos)} ta yuborilgan video yuklandi.", flush=True)
+print(f"Baza yuklandi: {len(processed_videos)} ta yuborilgan video mavjud.", flush=True)
 
 def save_sig(sig):
     processed_videos.add(sig)
@@ -120,22 +119,19 @@ class ProgressTracker:
 
 async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
     t_start = time.time()
-    
-    # 1-usul: Server orqali to'g'ridan-to'g'ri o'tkazish (IP to'qnashmaydi, 1 soniya oladi)
     try:
         await asyncio.wait_for(
             client.send_message(target_peer, file=msg.media, message=caption, reply_to=topic_id),
-            timeout=25.0
+            timeout=20.0
         )
         elapsed = round(time.time() - t_start, 2)
-        return True, f"server orqali to'g'ridan-to'g'ri ({elapsed}s)"
+        return True, f"server orqali ({elapsed}s)"
     except Exception:
         pass
 
-    # 2-usul: Agar server o'tkazmasa, disk orqali yuklab uzatish
     temp_file = thumb_path = None
     try:
-        print(f"[{ep_num}-qism] Server orqali yuklab olish boshlandi...", flush=True)
+        print(f"[{ep_num}-qism] Yuklab olish...", flush=True)
         try:
             thumb_path = await client.download_media(msg.media, file=TEMP_DIR, thumb=-1)
         except Exception:
@@ -159,7 +155,7 @@ async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
             progress_callback=prog_up
         )
         elapsed = round(time.time() - t_start, 2)
-        return True, f"faylni qayta yuklab jo'natish ({elapsed}s)"
+        return True, f"qayta jo'natish orqali ({elapsed}s)"
     except Exception as e:
         return False, str(e)
     finally:
@@ -173,7 +169,6 @@ async def send_safely(client, msg, target_peer, topic_id, caption, ep_num):
 async def process_msg(client, msg, target_peer, topic_id, ep_num):
     actual_ep, caption = build_caption(msg, ep_num)
 
-    # 13-qismdan kichiklarini o'tkazib yuborish
     if actual_ep < 13:
         return
 
@@ -182,7 +177,7 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
         return
 
     print(f"\n==========================================", flush=True)
-    print(f"➡️ Navbatdagi: {actual_ep}-qism (Xabar ID: {msg.id})", flush=True)
+    print(f"➡️ Navbatdagi: {actual_ep}-qism (ID: {msg.id})", flush=True)
 
     retry_count = 0
     while retry_count < 3:
@@ -191,38 +186,30 @@ async def process_msg(client, msg, target_peer, topic_id, ep_num):
             if ok:
                 print(f"✅ {caption.splitlines()[0]} joylandi! ({detail})", flush=True)
                 save_sig(sig)
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
                 return
             else:
                 print(f"⚠️ [{actual_ep}-qism] Qayta urinilmoqda ({detail})...", flush=True)
                 retry_count += 1
-                await asyncio.sleep(4)
+                await asyncio.sleep(3)
         except FloodWaitError as e:
-            print(f"⏳ FloodWait: {e.seconds}s kutilmoqda...", flush=True)
+            print(f"⏳ FloodWait: {e.seconds}s...", flush=True)
             await asyncio.sleep(e.seconds + 2)
         except Exception as e:
             print(f"❌ Xatolik: {e}", flush=True)
             retry_count += 1
-            await asyncio.sleep(4)
+            await asyncio.sleep(3)
 
-async def run_worker():
-    # Telegram mijozini IP buzilishi va ko'p DC ulanishlaridan himoyalash
-    client = TelegramClient(
-        StringSession(SESSION_STR),
-        API_ID,
-        API_HASH,
-        auto_reconnect=True,
-        connection_retries=None,
-        retry_delay=5,
-        flood_sleep_threshold=120
-    )
+async def main():
+    sess_file = "active_server_session" if os.path.exists("active_server_session.session") else "online_server_session"
+    client = TelegramClient(sess_file, API_ID, API_HASH, auto_reconnect=True, connection_retries=20, retry_delay=5)
     await client.connect()
     if not await client.is_user_authorized():
         print("❌ Xato: Sessiya tasdiqlanmagan!", flush=True)
         return
 
     me = await client.get_me()
-    print(f"Bot akkaunti: {me.first_name} (@{me.username or 'yoq'}) faol.", flush=True)
+    print(f"Bot akkaunti: {me.first_name} faol.", flush=True)
     await client.get_dialogs(limit=30)
 
     try:
@@ -232,7 +219,7 @@ async def run_worker():
         check = await client(CheckChatInviteRequest(INVITE_HASH))
         source_chat = check.chat
     except Exception as e:
-        print(f"Kanalga ulanishda xato: {e}", flush=True)
+        print(f"Kanalga ulanish xatosi: {e}", flush=True)
         return
 
     source_peer = await client.get_input_entity(source_chat)
@@ -246,7 +233,7 @@ async def run_worker():
             current_episode_counter += 1
             await process_msg(client, msg, target_peer, TARGET_TOPIC_ID, current_episode_counter)
 
-    print("Mavjud barcha qismlar joylandi! Yangi qismlar kutilmoqda...", flush=True)
+    print("Barcha mavjud qismlar joylandi! Yangi qismlar kutilmoqda...", flush=True)
 
     @client.on(events.NewMessage(chats=source_chat.id))
     async def new_vid(event):
@@ -255,7 +242,11 @@ async def run_worker():
             current_episode_counter += 1
             await process_msg(client, event.message, target_peer, TARGET_TOPIC_ID, current_episode_counter)
 
-    await client.run_until_disconnected()
+    # Konteyner o'chib qolmasligi uchun doimiy fon tsikli
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    asyncio.run(run_worker())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(main())
